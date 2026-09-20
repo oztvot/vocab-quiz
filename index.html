@@ -53,7 +53,7 @@
   .row { display:flex; gap:8px; }
   .row button { width:auto; flex:1; }
   #pdfStatus { font-size:13px; color:#888; margin-top:6px; }
-  .hint { font-size:12px; color:#999; margin:4px 0; }
+  .hint { font-size:15px; color:#1cb0f6; margin:4px 0; letter-spacing:3px; font-weight:bold; text-align:center; }
   #authStatus { background:#f0f8ff; border-radius:10px; padding:10px; font-size:13px;
                 display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
   #authStatus button { width:auto; margin:0; padding:8px 12px; font-size:13px; }
@@ -79,11 +79,11 @@
 
       <input type="text" id="setNameInput" placeholder="단어장 이름 (예: PART5 UNIT02 명사)">
 
-      <p class="hint">① PDF 업로드로 자동 추출</p>
+      <p class="hint" style="text-align:left; font-size:13px; color:#999; letter-spacing:normal; font-weight:normal;">① PDF 업로드로 자동 추출</p>
       <input type="file" id="pdfFileInput" accept="application/pdf">
       <p id="pdfStatus"></p>
 
-      <p class="hint">② 또는 표 내용을 그대로 붙여넣기 (쉼표 없어도 OK)</p>
+      <p class="hint" style="text-align:left; font-size:13px; color:#999; letter-spacing:normal; font-weight:normal;">② 또는 표 내용을 그대로 붙여넣기 (쉼표 없어도 OK)</p>
       <textarea id="textInput" placeholder="announce 발표하다, 알리다&#10;administer 관리/운영하다&#10;...&#10;(또는 word,meaning 형식도 가능)"></textarea>
 
       <button onclick="addSet()">단어장 저장</button>
@@ -102,6 +102,7 @@
     <div class="question" id="questionText"></div>
     <div id="options"></div>
     <div id="typingArea" class="hidden">
+      <p id="typingHint" class="hint"></p>
       <input type="text" id="typingInput" placeholder="영단어를 입력하세요" autocapitalize="off" autocorrect="off">
       <button onclick="checkTyping()">확인</button>
     </div>
@@ -129,11 +130,9 @@ const firebaseConfig = {
   appId: "1:256562824281:web:128251cffbcfc74787dd48"
 };
 
-/* ★★★ 여기가 새로 추가된 핵심 수정 부분 ★★★ */
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
-/* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
 
 /* ===== 기본 제공 단어장 ===== */
 const DEFAULT_WORDS = [
@@ -483,9 +482,15 @@ function generateQuestions(list){
   return shuffle(qs);
 }
 
-/* ★ 정규식 버그 수정: $$ → $$ $$ ★ */
+/* ★ 괄호 제거 정규식 수정 (기존에 깨져 있던 부분) ★ */
 function normalizeTypingAnswer(word){
   return word.replace(/$$[^)]*$$/g, '').replace(/\s+/g,' ').trim().toLowerCase();
+}
+
+/* ★ 새로 추가: 힌트 생성 함수 (앞 2글자만 보여주고 나머지는 _ 처리) ★ */
+function generateHint(word){
+  const clean = normalizeTypingAnswer(word);
+  return clean.split('').map((ch, idx) => idx < 2 ? ch : '_').join(' ');
 }
 
 function startQuizFromSelected(){
@@ -532,6 +537,8 @@ function showQuestion(){
     const input = document.getElementById('typingInput');
     input.value = '';
     input.focus();
+    /* ★ 새로 추가: 힌트 표시 ★ */
+    document.getElementById('typingHint').textContent = generateHint(q.answer);
   }
 }
 
