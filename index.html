@@ -121,16 +121,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 
 /* ===== Firebase 설정: 본인 프로젝트 값으로 교체하세요 ===== */
 const firebaseConfig = {
-  apiKey: "여기에_API_KEY",
-  authDomain: "여기에_프로젝트.firebaseapp.com",
-  projectId: "여기에_프로젝트_ID",
-  storageBucket: "여기에_프로젝트.appspot.com",
-  messagingSenderId: "여기에_숫자",
-  appId: "여기에_앱ID"
+  apiKey: "AIzaSyA_8tT_fFmcQ9HyLwBOjBOMmLiWprR6r1M",
+  authDomain: "vocab-quiz-8e342.firebaseapp.com",
+  projectId: "vocab-quiz-8e342",
+  storageBucket: "vocab-quiz-8e342.firebasestorage.app",
+  messagingSenderId: "256562824281",
+  appId: "1:256562824281:web:128251cffbcfc74787dd48"
 };
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
 
 /* ===== 기본 제공 단어장 ===== */
 const DEFAULT_WORDS = [
