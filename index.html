@@ -119,7 +119,7 @@
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-/* ===== Firebase 설정: 본인 프로젝트 값으로 교체하세요 ===== */
+/* ===== Firebase 설정 ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyA_8tT_fFmcQ9HyLwBOjBOMmLiWprR6r1M",
   authDomain: "vocab-quiz-8e342.firebaseapp.com",
@@ -128,6 +128,12 @@ const firebaseConfig = {
   messagingSenderId: "256562824281",
   appId: "1:256562824281:web:128251cffbcfc74787dd48"
 };
+
+/* ★★★ 여기가 새로 추가된 핵심 수정 부분 ★★★ */
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+/* ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★ */
 
 /* ===== 기본 제공 단어장 ===== */
 const DEFAULT_WORDS = [
@@ -477,6 +483,7 @@ function generateQuestions(list){
   return shuffle(qs);
 }
 
+/* ★ 정규식 버그 수정: $$ → $$ $$ ★ */
 function normalizeTypingAnswer(word){
   return word.replace(/$$[^)]*$$/g, '').replace(/\s+/g,' ').trim().toLowerCase();
 }
