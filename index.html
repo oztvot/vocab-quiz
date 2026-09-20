@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>단어 퀴즈</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+  * { box-sizing: border-box; font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; }
+  body { background:#f7f7f7; margin:0; padding:16px; display:flex; justify-content:center; }
+  .card { background:#fff; border-radius:16px; box-shadow:0 4px 12px rgba(0,0,0,.08);
+          padding:24px; width:100%; max-width:520px; }
+  h1 { color:#58cc02; text-align:center; font-size:24px; }
+  h2 { font-size:17px; color:#333; margin-top:22px; }
+  textarea, input[type=text] {
+    width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #ccc; font-size:16px;
+  }
+  textarea { height:100px; }
+  input[type=file] { width:100%; margin:6px 0; font-size:14px; }
+  button {
+    background:#58cc02; color:#fff; border:none; padding:14px 18px; border-radius:12px;
+    font-weight:bold; cursor:pointer; font-size:16px; width:100%; margin-top:10px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:disabled { background:#ccc; }
+  button.small { width:auto; padding:8px 14px; font-size:13px; margin:0 6px 6px 0; }
+  button.danger { background:#ff4b4b; }
+  button.secondary { background:#1cb0f6; }
+  .option { display:block; width:100%; margin:8px 0; padding:14px; border-radius:10px;
+            border:2px solid #ddd; background:#fff; cursor:pointer; font-size:16px; text-align:left;}
+  .option.correct { border-color:#58cc02; background:#d7ffb8; }
+  .option.wrong { border-color:#ff4b4b; background:#ffd6d6; }
+  .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; }
+  .hearts { color:#ff4b4b; font-size:18px; }
+  .progress { height:10px; background:#eee; border-radius:6px; overflow:hidden; margin-bottom:20px;}
+  .progress-bar { height:100%; background:#58cc02; width:0%; transition:.3s; }
+  .question { font-size:20px; text-align:center; margin:20px 0; font-weight:bold; word-break:keep-all; }
+  #result { text-align:center; }
+  .hidden { display:none; }
+  .set-item { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;
+              padding:10px; border:1px solid #eee; border-radius:10px; margin-bottom:8px; gap:6px; }
+  .set-item.mastered { opacity:.5; }
+  .set-actions { white-space:nowrap; }
+  .set-label { flex:1; min-width:150px; cursor:pointer; font-size:14px; }
+  details { margin-top:15px; border:1px dashed #ccc; border-radius:10px; padding:10px; }
+  summary { cursor:pointer; font-weight:bold; color:#1cb0f6; font-size:15px; }
+  .row { display:flex; gap:8px; }
+  .row button { width:auto; flex:1; }
+  #pdfStatus { font-size:13px; color:#888; margin-top:6px; }
+  .hint { font-size:12px; color:#999; margin:4px 0; }
+  #authStatus { background:#f0f8ff; border-radius:10px; padding:10px; font-size:13px;
+                display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;}
+  #authStatus button { width:auto; margin:0; padding:8px 12px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📚 단어 퀴즈</h1>
+
+  <!-- 설정/단어장 관리 화면 -->
+  <div id="setup">
+    <div id="authStatus"></div>
+
+    <h2>단어장 목록</h2>
+    <div class="row">
+      <button class="small secondary" onclick="selectAllSets(true)">전체 선택</button>
+      <button class="small secondary" onclick="selectAllSets(false)">전체 해제</button>
+    </div>
+    <div id="setList"></div>
+
+    <details>
+      <summary>+ 새 단어장 추가</summary>
+
+      <input type="text" id="setNameInput" placeholder="단어장 이름 (예: PART5 UNIT02 명사)">
+
+      <p class="hint">① PDF 업로드로 자동 추출</p>
+      <input type="file" id="pdfFileInput" accept="application/pdf">
+      <p id="pdfStatus"></p>
+
+      <p class="hint">② 또는 표 내용을 그대로 붙여넣기 (쉼표 없어도 OK)</p>
+      <textarea id="textInput" placeholder="announce 발표하다, 알리다&#10;administer 관리/운영하다&#10;...&#10;(또는 word,meaning 형식도 가능)"></textarea>
+
+      <button onclick="addSet()">단어장 저장</button>
+    </details>
+
+    <button onclick="startQuizFromSelected()">✅ 선택한 단어장으로 퀴즈 시작</button>
+  </div>
+
+  <!-- 퀴즈 화면 -->
+  <div id="quiz" class="hidden">
+    <div class="top">
+      <div class="hearts" id="hearts">❤️❤️❤️❤️❤️</div>
+      <div id="scoreText">점수: 0</div>
+    </div>
+    <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="question" id="questionText"></div>
+    <div id="options"></div>
+    <div id="typingArea" class="hidden">
+      <input type="text" id="typingInput" placeholder="영단어를 입력하세요" autocapitalize="off" autocorrect="off">
+      <button onclick="checkTyping()">확인</button>
+    </div>
+  </div>
+
+  <!-- 결과 화면 -->
+  <div id="result" class="hidden">
+    <h2 id="resultTitle"></h2>
+    <p id="resultScore"></p>
+    <div id="wrongList"></div>
+    <button onclick="backToSetup()">단어장으로 돌아가기</button>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+/* ===== Firebase 설정: 본인 프로젝트 값으로 교체하세요 ===== */
+const firebaseConfig = {
+  apiKey: "여기에_API_KEY",
+  authDomain: "여기에_프로젝트.firebaseapp.com",
+  projectId: "여기에_프로젝트_ID",
+  storageBucket: "여기에_프로젝트.appspot.com",
+  messagingSenderId: "여기에_숫자",
+  appId: "여기에_앱ID"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+/* ===== 기본 제공 단어장 ===== */
+const DEFAULT_WORDS = [
+  {word:"announce", meaning:"발표하다, 알리다"},
+  {word:"administer", meaning:"관리/운영하다"},
+  {word:"authorize", meaning:"승인하다"},
+  {word:"approve", meaning:"승인하다"},
+  {word:"appoint", meaning:"임명하다"},
+  {word:"award", meaning:"수여하다"},
+  {word:"address", meaning:"(일/문제 등을) 처리하다, 연설하다"},
+  {word:"benefit (from)", meaning:"혜택을 얻다"},
+  {word:"accommodate", meaning:"수용하다"},
+  {word:"commence", meaning:"시작하다"},
+  {word:"acquire", meaning:"획득하다, 인수하다"},
+  {word:"conduct", meaning:"수행하다"},
+  {word:"assume", meaning:"(직책/책임을) 떠맡다"},
+  {word:"consult", meaning:"상담하다, 참고하다"},
+  {word:"acknowledge", meaning:"(수령을) 알리다, 인정하다"},
+  {word:"compile", meaning:"(문서 등을) 엮다, 편집하다"},
+  {word:"allocate", meaning:"할당하다"},
+  {word:"compensate", meaning:"보상하다, 배상하다"},
+  {word:"arrange", meaning:"준비하다, 마련하다"},
+  {word:"customize", meaning:"주문 제작하다"},
+  {word:"confirm", meaning:"승인하다, 확인해주다"},
+  {word:"feature", meaning:"특징으로 하다"},
+  {word:"charge", meaning:"청구하다"},
+  {word:"handle", meaning:"(문제 등을) 다루다, 처리하다"},
+  {word:"demonstrate", meaning:"보여주다, 입증하다"},
+  {word:"intend", meaning:"(to부정사) 의도하다"},
+  {word:"display", meaning:"전시하다"},
+  {word:"initiate", meaning:"시작하다"},
+  {word:"designate", meaning:"지정하다"},
+  {word:"implement", meaning:"시행하다"},
+  {word:"extend", meaning:"연장하다"},
+  {word:"issue", meaning:"발행하다, 발표하다"},
+  {word:"endorse", meaning:"지지하다, 홍보하다"},
+  {word:"indicate", meaning:"나타내다, 보여주다"},
+  {word:"evaluate", meaning:"평가하다"},
+  {word:"locate", meaning:"두다, 장소를 정하다"},
+  {word:"ensure", meaning:"확실히 하다"},
+  {word:"modify", meaning:"수정하다"},
+  {word:"enclose", meaning:"동봉하다"},
+  {word:"merge", meaning:"합병하다"},
+  {word:"notify", meaning:"알리다, 통보하다"},
+  {word:"represent", meaning:"나타내다, 대표하다"},
+  {word:"obtain", meaning:"얻다, 구하다"},
+  {word:"replace", meaning:"대체하다"},
+  {word:"operate", meaning:"작동시키다"},
+  {word:"release", meaning:"출시하다, 공개하다"},
+  {word:"oversee", meaning:"감독하다"},
+  {word:"reserve", meaning:"예약하다, (권한 등을) 보유하다"},
+  {word:"propose", meaning:"제안하다, 의도하다"},
+  {word:"secure", meaning:"확보하다"},
+  {word:"present", meaning:"제시하다"},
+  {word:"strive (to)", meaning:"노력하다"},
+  {word:"proceed", meaning:"진행하다"},
+  {word:"solicit", meaning:"요청하다, 간청하다"},
+  {word:"qualify (for)", meaning:"~에 대한 자격을 갖추다"},
+  {word:"undergo", meaning:"(일 등을) 겪다, 경험하다"},
+  {word:"register (for)", meaning:"등록하다"},
+  {word:"verify", meaning:"확인하다, 입증하다"},
+  {word:"retain", meaning:"유지하다, 보유하다"},
+  {word:"waive", meaning:"(요금을) 면제하다, 포기하다"}
+];
+
+const STORAGE_KEY = "vocabApp_sets";
+let currentUser = null;
+let useCloud = false;
+let cloudSetsCache = null;
+
+/* ===== 로그인 상태 관리 ===== */
+function loginWithGoogle(){
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => alert('로그인 실패: ' + err.message));
+}
+function logout(){ auth.signOut(); }
+
+function updateAuthUI(){
+  const el = document.getElementById('authStatus');
+  if(currentUser){
+    el.innerHTML = `☁️ <b>${currentUser.displayName || '사용자'}</b>님 (동기화 중)
+      <button class="small danger" onclick="logout()">로그아웃</button>`;
+  } else {
+    el.innerHTML = `📱 게스트 모드 (이 기기에만 저장)
+      <button class="small secondary" onclick="loginWithGoogle()">Google 로그인으로 동기화</button>`;
+  }
+}
+
+auth.onAuthStateChanged(user => {
+  if(user){
+    currentUser = user;
+    useCloud = true;
+    cloudSetsCache = null;
+    updateAuthUI();
+    fetchCloudSets();
+  } else {
+    currentUser = null;
+    useCloud = false;
+    updateAuthUI();
+    renderSetList();
+  }
+});
+
+async function fetchCloudSets(){
+  const docRef = db.collection('users').doc(currentUser.uid);
+  const snap = await docRef.get();
+  if(snap.exists && snap.data().sets){
+    cloudSetsCache = snap.data().sets;
+  } else {
+    cloudSetsCache = [{
+      id: "default_unit01",
+      name: "PART5 UNIT01 동사 어휘",
+      words: DEFAULT_WORDS,
+      selected: true,
+      mastered: false
+    }];
+    await docRef.set({ sets: cloudSetsCache });
+  }
+  renderSetList();
+}
+
+/* ===== 저장소 (게스트=localStorage / 로그인=Firestore) ===== */
+function loadSets(){
+  if(useCloud){
+    return cloudSetsCache || [];
+  }
+  let raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw){
+    const initial = [{
+      id: "default_unit01",
+      name: "PART5 UNIT01 동사 어휘",
+      words: DEFAULT_WORDS,
+      selected: true,
+      mastered: false
+    }];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    return initial;
+  }
+  return JSON.parse(raw);
+}
+
+function saveSets(sets){
+  if(useCloud){
+    cloudSetsCache = sets;
+    db.collection('users').doc(currentUser.uid).set({ sets })
+      .catch(err => alert('동기화 오류: ' + err.message));
+  } else {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sets));
+  }
+}
+
+function renderSetList(){
+  const sets = loadSets();
+  const container = document.getElementById('setList');
+  if(sets.length === 0){
+    container.innerHTML = '<p>저장된 단어장이 없습니다.</p>';
+    return;
+  }
+  container.innerHTML = sets.map(s => `
+    <div class="set-item ${s.mastered ? 'mastered':''}">
+      <label class="set-label">
+        <input type="checkbox" ${s.selected ? 'checked':''} onchange="toggleSelected('${s.id}', this.checked)">
+        <b>${s.name}</b> (${s.words.length}개) ${s.mastered ? '✅' : ''}
+      </label>
+      <div class="set-actions">
+        <button class="small secondary" onclick="toggleMastered('${s.id}')">${s.mastered ? '복습하기' : '완료 표시'}</button>
+        <button class="small danger" onclick="deleteSet('${s.id}')">삭제</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleSelected(id, checked){
+  const sets = loadSets();
+  sets.find(x => x.id === id).selected = checked;
+  saveSets(sets);
+}
+function toggleMastered(id){
+  const sets = loadSets();
+  const s = sets.find(x => x.id === id);
+  s.mastered = !s.mastered;
+  s.selected = !s.mastered;
+  saveSets(sets);
+  renderSetList();
+}
+function deleteSet(id){
+  if(!confirm('이 단어장을 삭제할까요?')) return;
+  saveSets(loadSets().filter(x => x.id !== id));
+  renderSetList();
+}
+function selectAllSets(value){
+  const sets = loadSets();
+  sets.forEach(s => s.selected = value);
+  saveSets(sets);
+  renderSetList();
+}
+
+/* ===== 텍스트 파싱 ===== */
+function smartParseLine(rawLine){
+  let text = rawLine.replace(/^\s*\d+\s*/, '').trim();
+  if(!text) return null;
+  const hangulIdx = text.search(/[가-힣]/);
+  if(hangulIdx <= 0) return null;
+
+  let wordPart = text.slice(0, hangulIdx).trim();
+  let meaningPart = text.slice(hangulIdx).trim();
+
+  const openIdx = wordPart.indexOf('(');
+  if(openIdx !== -1 && !wordPart.includes(')')){
+    meaningPart = wordPart.slice(openIdx) + meaningPart;
+    wordPart = wordPart.slice(0, openIdx).trim();
+  }
+
+  if(!/^[A-Za-z][A-Za-z\s()'/-]*$/.test(wordPart)) return null;
+  if(wordPart.length < 2) return null;
+
+  return {word: wordPart, meaning: meaningPart};
+}
+
+function parseLine(line){
+  if(line.includes(',')){
+    const idx = line.indexOf(',');
+    const word = line.slice(0, idx).trim();
+    const meaning = line.slice(idx+1).trim();
+    if(!word || !meaning || word.toLowerCase() === 'word') return null;
+    return {word, meaning};
+  }
+  return smartParseLine(line);
+}
+
+function addSet(){
+  const nameInput = document.getElementById('setNameInput');
+  const textInput = document.getElementById('textInput');
+  const lines = textInput.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const words = lines.map(parseLine).filter(x => x !== null);
+
+  if(words.length < 2){
+    alert('최소 2개 이상의 단어를 인식하지 못했습니다. 내용을 확인해주세요.');
+    return;
+  }
+
+  const sets = loadSets();
+  const name = nameInput.value.trim() || `단어장 ${sets.length + 1}`;
+  sets.push({ id: 'set_' + Date.now(), name, words, selected: true, mastered: false });
+  saveSets(sets);
+  nameInput.value = '';
+  textInput.value = '';
+  document.getElementById('pdfStatus').textContent = '';
+  renderSetList();
+  alert(`"${name}" 단어장이 저장되었습니다! (${words.length}개)`);
+}
+
+/* ===== PDF 업로드 및 텍스트 추출 ===== */
+async function extractPdfLines(file){
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+  let allLines = [];
+
+  for(let pageNum = 1; pageNum <= pdf.numPages; pageNum++){
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({scale: 1});
+    const textContent = await page.getTextContent();
+
+    const items = textContent.items.filter(it => {
+      const [a,b,c] = it.transform;
+      return Math.abs(b) < 0.01 && Math.abs(c) < 0.01;
+    });
+
+    const rows = [];
+    items.forEach(it => {
+      const x = it.transform[4], y = it.transform[5];
+      let row = rows.find(r => Math.abs(r.y - y) < 3);
+      if(!row){ row = {y, items:[]}; rows.push(row); }
+      row.items.push({x, str: it.str});
+    });
+    rows.forEach(r => r.items.sort((a,b) => a.x - b.x));
+
+    const threshold = viewport.width / 2;
+    const leftRows = [], rightRows = [];
+    rows.forEach(r => {
+      const avgX = r.items.reduce((s,i) => s+i.x, 0) / r.items.length;
+      const text = r.items.map(i => i.str).join(' ').replace(/\s+/g,' ').trim();
+      if(!text) return;
+      (avgX < threshold ? leftRows : rightRows).push({y:r.y, text});
+    });
+    leftRows.sort((a,b) => b.y - a.y);
+    rightRows.sort((a,b) => b.y - a.y);
+
+    allLines = allLines.concat(leftRows.map(r=>r.text), rightRows.map(r=>r.text));
+  }
+  return allLines;
+}
+
+async function handlePdfUpload(file){
+  const statusEl = document.getElementById('pdfStatus');
+  try{
+    statusEl.textContent = '📄 PDF 분석 중...';
+    const rawLines = await extractPdfLines(file);
+    const parsed = rawLines.map(smartParseLine).filter(x => x !== null);
+
+    if(parsed.length === 0){
+      statusEl.textContent = '단어를 찾지 못했어요. 아래 텍스트 박스에 직접 붙여넣어 주세요.';
+      return;
+    }
+
+    const csvText = parsed.map(p => `${p.word},${p.meaning}`).join('\n');
+    const textInput = document.getElementById('textInput');
+    textInput.value = textInput.value ? textInput.value + '\n' + csvText : csvText;
+    statusEl.textContent = `✅ ${parsed.length}개 추출 완료! 아래 내용을 확인 후 "단어장 저장"을 눌러주세요.`;
+  } catch(err){
+    console.error(err);
+    statusEl.textContent = '⚠️ PDF를 읽는 중 오류가 발생했습니다. (형식이 다른 PDF일 수 있어요)';
+  }
+}
+
+document.getElementById('pdfFileInput').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if(file) handlePdfUpload(file);
+});
+
+/* ===== 퀴즈 로직 ===== */
+function getSelectedWords(){
+  const sets = loadSets().filter(s => s.selected);
+  const map = new Map();
+  sets.forEach(s => s.words.forEach(w => map.set(w.word.toLowerCase(), w)));
+  return Array.from(map.values());
+}
+
+let words = [], questions = [], currentIndex = 0, hearts = 5, score = 0, wrongAnswers = [];
+
+function shuffle(arr){ return arr.sort(() => Math.random() - 0.5); }
+
+function generateQuestions(list){
+  const qs = [];
+  list.forEach(item => {
+    const type = Math.floor(Math.random() * 3);
+    if(type === 0 && list.length >= 4){
+      const distractors = shuffle(list.filter(w => w.word !== item.word)).slice(0,3).map(w => w.meaning);
+      qs.push({kind:'mc', prompt:`"${item.word}" 의 뜻은?`, answer:item.meaning, options:shuffle([item.meaning, ...distractors]), word:item.word});
+    } else if(type === 1 && list.length >= 4){
+      const distractors = shuffle(list.filter(w => w.word !== item.word)).slice(0,3).map(w => w.word);
+      qs.push({kind:'mc', prompt:`"${item.meaning}" 에 해당하는 단어는?`, answer:item.word, options:shuffle([item.word, ...distractors]), word:item.word});
+    } else {
+      qs.push({kind:'typing', prompt:`"${item.meaning}" 를 영어로 입력하세요`, answer:item.word, word:item.word});
+    }
+  });
+  return shuffle(qs);
+}
+
+function normalizeTypingAnswer(word){
+  return word.replace(/$$[^)]*$$/g, '').replace(/\s+/g,' ').trim().toLowerCase();
+}
+
+function startQuizFromSelected(){
+  words = getSelectedWords();
+  if(words.length < 2){
+    alert('퀴즈를 시작하려면 최소 2개 이상의 단어가 선택되어야 합니다.');
+    return;
+  }
+  questions = generateQuestions(words);
+  currentIndex = 0; hearts = 5; score = 0; wrongAnswers = [];
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('quiz').classList.remove('hidden');
+  showQuestion();
+}
+
+function updateTop(){
+  document.getElementById('hearts').textContent = '❤️'.repeat(hearts) + '🖤'.repeat(5-hearts);
+  document.getElementById('scoreText').textContent = '점수: ' + score;
+  document.getElementById('progressBar').style.width = (currentIndex / questions.length) * 100 + '%';
+}
+
+function showQuestion(){
+  updateTop();
+  if(currentIndex >= questions.length || hearts <= 0){ endQuiz(); return; }
+  const q = questions[currentIndex];
+  document.getElementById('questionText').textContent = q.prompt;
+  const optionsDiv = document.getElementById('options');
+  const typingArea = document.getElementById('typingArea');
+  optionsDiv.innerHTML = '';
+
+  if(q.kind === 'mc'){
+    typingArea.classList.add('hidden');
+    optionsDiv.classList.remove('hidden');
+    q.options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.className = 'option';
+      btn.textContent = opt;
+      btn.onclick = () => checkMC(opt, q, btn);
+      optionsDiv.appendChild(btn);
+    });
+  } else {
+    optionsDiv.classList.add('hidden');
+    typingArea.classList.remove('hidden');
+    const input = document.getElementById('typingInput');
+    input.value = '';
+    input.focus();
+  }
+}
+
+function checkMC(selected, q, btnEl){
+  document.querySelectorAll('.option').forEach(b => b.disabled = true);
+  if(selected === q.answer){
+    btnEl.classList.add('correct'); score += 10;
+  } else {
+    btnEl.classList.add('wrong'); hearts--; wrongAnswers.push(q);
+    document.querySelectorAll('.option').forEach(b => { if(b.textContent === q.answer) b.classList.add('correct'); });
+  }
+  setTimeout(() => { currentIndex++; showQuestion(); }, 900);
+}
+
+function checkTyping(){
+  const q = questions[currentIndex];
+  const val = normalizeTypingAnswer(document.getElementById('typingInput').value);
+  if(val === normalizeTypingAnswer(q.answer)){
+    score += 10;
+  } else {
+    hearts--; wrongAnswers.push(q);
+    alert('정답: ' + q.answer);
+  }
+  currentIndex++;
+  showQuestion();
+}
+
+function endQuiz(){
+  document.getElementById('quiz').classList.add('hidden');
+  document.getElementById('result').classList.remove('hidden');
+  document.getElementById('resultTitle').textContent = hearts > 0 ? '🎉 완료!' : '💔 하트를 모두 소진했어요';
+  document.getElementById('resultScore').textContent = `최종 점수: ${score} / ${questions.length * 10}`;
+  const wrongDiv = document.getElementById('wrongList');
+  wrongDiv.innerHTML = wrongAnswers.length > 0
+    ? '<h3>오답 노트</h3>' + wrongAnswers.map(w => `<p>${w.word} — 정답: ${w.answer}</p>`).join('')
+    : '<p>틀린 문제가 없어요! 완벽해요 👏</p>';
+}
+
+function backToSetup(){
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('setup').classList.remove('hidden');
+  renderSetList();
+}
+
+/* 초기 렌더링 (로그인 여부 확인 전 임시로 게스트 모드 표시) */
+updateAuthUI();
+renderSetList();
+</script>
+</body>
+</html>
