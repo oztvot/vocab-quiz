@@ -471,12 +471,12 @@ function generateQuestions(list){
     const type = Math.floor(Math.random() * 3);
     if(type === 0 && list.length >= 4){
       const distractors = shuffle(list.filter(w => w.word !== item.word)).slice(0,3).map(w => w.meaning);
-      qs.push({kind:'mc', prompt:`"${item.word}" 의 뜻은?`, answer:item.meaning, options:shuffle([item.meaning, ...distractors]), word:item.word});
+      qs.push({kind:'mc', prompt:`"${item.word}" 의 뜻은?`, answer:item.meaning, options:shuffle([item.meaning, ...distractors]), word:item.word, meaning:item.meaning});
     } else if(type === 1 && list.length >= 4){
       const distractors = shuffle(list.filter(w => w.word !== item.word)).slice(0,3).map(w => w.word);
-      qs.push({kind:'mc', prompt:`"${item.meaning}" 에 해당하는 단어는?`, answer:item.word, options:shuffle([item.word, ...distractors]), word:item.word});
+      qs.push({kind:'mc', prompt:`"${item.meaning}" 에 해당하는 단어는?`, answer:item.word, options:shuffle([item.word, ...distractors]), word:item.word, meaning:item.meaning});
     } else {
-      qs.push({kind:'typing', prompt:`"${item.meaning}" 를 영어로 입력하세요`, answer:item.word, word:item.word});
+      qs.push({kind:'typing', prompt:`"${item.meaning}" 를 영어로 입력하세요`, answer:item.word, word:item.word, meaning:item.meaning});
     }
   });
   return shuffle(qs);
@@ -573,7 +573,7 @@ function endQuiz(){
   document.getElementById('resultScore').textContent = `최종 점수: ${score} / ${questions.length * 10}`;
   const wrongDiv = document.getElementById('wrongList');
   wrongDiv.innerHTML = wrongAnswers.length > 0
-    ? '<h3>오답 노트</h3>' + wrongAnswers.map(w => `<p>${w.word} — 정답: ${w.answer}</p>`).join('')
+    ? '<h3>오답 노트</h3>' + wrongAnswers.map(w => `<p><b>${w.word}</b> — ${w.meaning}</p>`).join('')
     : '<p>틀린 문제가 없어요! 완벽해요 👏</p>';
 }
 
